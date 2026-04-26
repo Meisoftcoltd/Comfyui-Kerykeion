@@ -39,24 +39,101 @@ def get_spanish_phase(phase_name):
     """Translates the moon phase to Spanish."""
     return PHASE_TRANSLATIONS.get(phase_name, phase_name)
 
+def get_simplified_spanish_phase(phase_name):
+    """Returns a simplified Spanish moon phase."""
+    if phase_name == "New Moon":
+        return "Nueva"
+    elif phase_name in ["Waxing Crescent", "First Quarter", "Waxing Gibbous"]:
+        return "Creciente"
+    elif phase_name == "Full Moon":
+        return "Llena"
+    elif phase_name in ["Waning Gibbous", "Last Quarter", "Waning Crescent"]:
+        return "Menguante"
+    return phase_name
+
 class TransitDataCalculator:
     """
-    Placeholder node to satisfy the export requirement for TransitDataCalculator.
+    ComfyUI Custom Node to calculate astrological transits for a specific target date.
     """
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "dummy": ("STRING", {"default": "Dummy"}),
+                "target_year": ("INT", {"default": 2024, "min": 1900, "max": 2100}),
+                "target_month": ("INT", {"default": 1, "min": 1, "max": 12}),
+                "target_day": ("INT", {"default": 1, "min": 1, "max": 31}),
+                "target_hour": ("INT", {"default": 12, "min": 0, "max": 23}),
+                "target_minute": ("INT", {"default": 0, "min": 0, "max": 59}),
+                "reference_city": ("STRING", {"default": "Madrid"}),
             }
         }
     RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("data",)
+    RETURN_NAMES = ("transit_data_json",)
     FUNCTION = "calculate"
     CATEGORY = "ComfyUI-Pitonisa"
 
-    def calculate(self, dummy):
-        return (json.dumps({"message": "TransitDataCalculator placeholder"}, ensure_ascii=False),)
+    def calculate(self, target_year, target_month, target_day, target_hour, target_minute, reference_city):
+        try:
+            # 1. Geocoding
+            geolocator = Nominatim(user_agent="comfyui-kerykeion-meisoft", timeout=10)
+            location = geolocator.geocode(reference_city)
+
+            if not location:
+                error_msg = {"error": "Ciudad no encontrada o error de geocodificación"}
+                print(f"Warning (TransitDataCalculator): City '{reference_city}' not found.")
+                return (json.dumps(error_msg, ensure_ascii=False),)
+
+            lat = location.latitude
+            lon = location.longitude
+
+            # 2. Timezone
+            tf = TimezoneFinder()
+            tz_str = tf.timezone_at(lng=lon, lat=lat)
+
+            if not tz_str:
+                error_msg = {"error": "No se pudo determinar la zona horaria para la ubicación"}
+                print(f"Warning (TransitDataCalculator): Timezone not found for '{reference_city}'.")
+                return (json.dumps(error_msg, ensure_ascii=False),)
+
+            # 3. Calculate Transits (Offline mode)
+            subject = AstrologicalSubject(
+                name="Transitos",
+                year=target_year,
+                month=target_month,
+                day=target_day,
+                hour=target_hour,
+                minute=target_minute,
+                lat=lat,
+                lng=lon,
+                tz_str=tz_str,
+                city=reference_city,
+                online=False
+            )
+
+            # 4. Format Output
+            data = {
+                "fecha_objetivo": f"{target_year:04d}-{target_month:02d}-{target_day:02d}",
+                "posiciones_actuales": {
+                    "sol": get_spanish_sign(subject.sun.sign),
+                    "luna": get_spanish_sign(subject.moon.sign),
+                    "mercurio": get_spanish_sign(subject.mercury.sign),
+                    "venus": get_spanish_sign(subject.venus.sign),
+                    "marte": get_spanish_sign(subject.mars.sign),
+                    "jupiter": get_spanish_sign(subject.jupiter.sign),
+                    "saturno": get_spanish_sign(subject.saturn.sign),
+                    "urano": get_spanish_sign(subject.uranus.sign),
+                    "neptuno": get_spanish_sign(subject.neptune.sign),
+                    "pluton": get_spanish_sign(subject.pluto.sign)
+                },
+                "fase_lunar": get_simplified_spanish_phase(subject.lunar_phase.moon_phase_name)
+            }
+
+            return (json.dumps(data, ensure_ascii=False, indent=2),)
+
+        except Exception as e:
+            error_msg = {"error": f"Error inesperado: {str(e)}"}
+            print(f"Error (TransitDataCalculator): {str(e)}")
+            return (json.dumps(error_msg, ensure_ascii=False),)
 
 class TransitRangeScanner:
     """
