@@ -1,7 +1,12 @@
 import json
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
-from kerykeion import AstrologicalSubject
+from kerykeion import AstrologicalSubject, SynastryAspects, KerykeionChartSVG
+import cairosvg
+from PIL import Image
+import io
+import torch
+import numpy as np
 
 # Dictionary to translate English sign names or abbreviations to Spanish full names
 SIGN_TRANSLATIONS = {
@@ -134,6 +139,180 @@ class TransitDataCalculator:
             error_msg = {"error": f"Error inesperado: {str(e)}"}
             print(f"Error (TransitDataCalculator): {str(e)}")
             return (json.dumps(error_msg, ensure_ascii=False),)
+
+ASPECT_TRANSLATIONS = {
+    "conjunction": "Conjunción",
+    "opposition": "Oposición",
+    "trine": "Trígono",
+    "square": "Cuadratura",
+    "sextile": "Sextil"
+}
+
+PLANET_TRANSLATIONS = {
+    "Sun": "Sol", "Moon": "Luna", "Mercury": "Mercurio", "Venus": "Venus", "Mars": "Marte",
+    "Jupiter": "Júpiter", "Saturn": "Saturno", "Uranus": "Urano", "Neptune": "Neptuno", "Pluto": "Plutón",
+    "True_Node": "Nodo Norte", "True_North_Lunar_Node": "Nodo Norte", "Mean_Node": "Nodo Norte",
+    "True_South_Lunar_Node": "Nodo Sur",
+    "Ascendant": "Ascendente", "Descendant": "Descendente", "Medium_Coeli": "Medio Cielo", "Imum_Coeli": "Fondo del Cielo",
+    "Chiron": "Quirón", "Mean_Lilith": "Lilith"
+}
+
+def get_spanish_aspect(aspect_name):
+    return ASPECT_TRANSLATIONS.get(aspect_name, aspect_name.capitalize())
+
+def get_spanish_planet(planet_name):
+    return PLANET_TRANSLATIONS.get(planet_name, planet_name)
+
+class SynastryCalculator:
+    """
+    ComfyUI Custom Node to calculate synastry (compatibility) aspects between two people.
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "p1_year": ("INT", {"default": 1990, "min": 1900, "max": 2100}),
+                "p1_month": ("INT", {"default": 1, "min": 1, "max": 12}),
+                "p1_day": ("INT", {"default": 1, "min": 1, "max": 31}),
+                "p1_hour": ("INT", {"default": 12, "min": 0, "max": 23}),
+                "p1_minute": ("INT", {"default": 0, "min": 0, "max": 59}),
+                "p1_city": ("STRING", {"default": "Madrid"}),
+
+                "p2_year": ("INT", {"default": 1995, "min": 1900, "max": 2100}),
+                "p2_month": ("INT", {"default": 1, "min": 1, "max": 12}),
+                "p2_day": ("INT", {"default": 1, "min": 1, "max": 31}),
+                "p2_hour": ("INT", {"default": 12, "min": 0, "max": 23}),
+                "p2_minute": ("INT", {"default": 0, "min": 0, "max": 59}),
+                "p2_city": ("STRING", {"default": "Barcelona"}),
+            }
+        }
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("synastry_data_json",)
+    FUNCTION = "calculate"
+    CATEGORY = "ComfyUI-Pitonisa"
+
+    def _get_location_data(self, city_name, geolocator, tf):
+        location = geolocator.geocode(city_name)
+        if not location:
+            return None, None, f"Ciudad no encontrada: {city_name}"
+        lat = location.latitude
+        lon = location.longitude
+        tz_str = tf.timezone_at(lng=lon, lat=lat)
+        if not tz_str:
+            return None, None, f"Zona horaria no encontrada para: {city_name}"
+        return lat, lon, tz_str
+
+    def calculate(self, p1_year, p1_month, p1_day, p1_hour, p1_minute, p1_city,
+                  p2_year, p2_month, p2_day, p2_hour, p2_minute, p2_city):
+        try:
+            geolocator = Nominatim(user_agent="comfyui-kerykeion-meisoft", timeout=10)
+            tf = TimezoneFinder()
+
+            lat1, lon1, tz1 = self._get_location_data(p1_city, geolocator, tf)
+            if lat1 is None:
+                return (json.dumps({"error": tz1}, ensure_ascii=False),)
+
+            lat2, lon2, tz2 = self._get_location_data(p2_city, geolocator, tf)
+            if lat2 is None:
+                return (json.dumps({"error": tz2}, ensure_ascii=False),)
+
+            s1 = AstrologicalSubject(name="P1", year=p1_year, month=p1_month, day=p1_day, hour=p1_hour, minute=p1_minute, lat=lat1, lng=lon1, tz_str=tz1, city=p1_city, online=False)
+            s2 = AstrologicalSubject(name="P2", year=p2_year, month=p2_month, day=p2_day, hour=p2_hour, minute=p2_minute, lat=lat2, lng=lon2, tz_str=tz2, city=p2_city, online=False)
+
+            syn = SynastryAspects(s1, s2)
+            aspects = syn.get_relevant_aspects()
+
+            aspectos_relevantes = []
+            for aspect in aspects:
+                # Filter out minor aspects if desired, though Kerykeion 'relevant_aspects' is usually a good subset
+                p1_es = get_spanish_planet(aspect.p1_name)
+                p2_es = get_spanish_planet(aspect.p2_name)
+                asp_es = get_spanish_aspect(aspect.aspect)
+
+                aspectos_relevantes.append(f"{p1_es} de P1 en {asp_es} con {p2_es} de P2")
+
+            data = {
+                "sinastria": aspectos_relevantes
+            }
+            return (json.dumps(data, ensure_ascii=False, indent=2),)
+
+        except Exception as e:
+            return (json.dumps({"error": f"Error inesperado: {str(e)}"}, ensure_ascii=False),)
+
+class NatalChartImageNode:
+    """
+    ComfyUI Custom Node to generate a visual Natal Chart image.
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "year": ("INT", {"default": 2000, "min": 1900, "max": 2100}),
+                "month": ("INT", {"default": 1, "min": 1, "max": 12}),
+                "day": ("INT", {"default": 1, "min": 1, "max": 31}),
+                "hour": ("INT", {"default": 12, "min": 0, "max": 23}),
+                "minute": ("INT", {"default": 0, "min": 0, "max": 59}),
+                "city_name": ("STRING", {"default": "Madrid"}),
+            }
+        }
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("natal_chart_image",)
+    FUNCTION = "generate_image"
+    CATEGORY = "ComfyUI-Pitonisa"
+
+    def generate_image(self, year, month, day, hour, minute, city_name):
+        try:
+            # 1. Geocoding
+            geolocator = Nominatim(user_agent="comfyui-kerykeion-meisoft", timeout=10)
+            location = geolocator.geocode(city_name)
+            if not location:
+                print(f"Error (NatalChartImageNode): Ciudad '{city_name}' no encontrada.")
+                # Create a blank fallback image
+                blank_img = torch.zeros((1, 512, 512, 3), dtype=torch.float32)
+                return (blank_img,)
+
+            lat = location.latitude
+            lon = location.longitude
+
+            # 2. Timezone
+            tf = TimezoneFinder()
+            tz_str = tf.timezone_at(lng=lon, lat=lat)
+            if not tz_str:
+                print(f"Error (NatalChartImageNode): Zona horaria no encontrada para '{city_name}'.")
+                blank_img = torch.zeros((1, 512, 512, 3), dtype=torch.float32)
+                return (blank_img,)
+
+            # 3. Calculate Astrological Chart
+            subject = AstrologicalSubject(
+                name="VisualUser",
+                year=year,
+                month=month,
+                day=day,
+                hour=hour,
+                minute=minute,
+                lat=lat,
+                lng=lon,
+                tz_str=tz_str,
+                city=city_name,
+                online=False
+            )
+
+            # 4. Generate SVG Template
+            svg = KerykeionChartSVG(subject)
+            svg.makeTemplate()
+            svg_string = svg.template
+
+            # 5. Convert SVG to Tensor
+            png_data = cairosvg.svg2png(bytestring=svg_string.encode('utf-8'))
+            image = Image.open(io.BytesIO(png_data)).convert('RGB')
+            tensor = torch.from_numpy(np.array(image).astype(np.float32) / 255.0).unsqueeze(0)
+
+            return (tensor,)
+
+        except Exception as e:
+            print(f"Error inesperado en NatalChartImageNode: {str(e)}")
+            blank_img = torch.zeros((1, 512, 512, 3), dtype=torch.float32)
+            return (blank_img,)
 
 class TransitRangeScanner:
     """
@@ -399,11 +578,15 @@ class NatalChartCalculator:
 NODE_CLASS_MAPPINGS = {
     "NatalChartCalculator": NatalChartCalculator,
     "TransitDataCalculator": TransitDataCalculator,
-    "TransitRangeScanner": TransitRangeScanner
+    "TransitRangeScanner": TransitRangeScanner,
+    "SynastryCalculator": SynastryCalculator,
+    "NatalChartImageNode": NatalChartImageNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NatalChartCalculator": "Natal Chart Calculator",
     "TransitDataCalculator": "Transit Data Calculator",
-    "TransitRangeScanner": "Transit Range Scanner"
+    "TransitRangeScanner": "Transit Range Scanner",
+    "SynastryCalculator": "Synastry Calculator",
+    "NatalChartImageNode": "Natal Chart Image"
 }
