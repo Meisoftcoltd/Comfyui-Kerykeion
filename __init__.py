@@ -443,7 +443,7 @@ class TransitRangeScanner:
                     if prev_planet.sign != curr_planet.sign:
                         signo_esp = get_spanish_sign(curr_planet.sign)
                         eventos_clave.append({
-                            "dia": day_offset + 1,
+                            "fecha": current_date.strftime("%d/%m/%Y"),
                             "evento": f"Ingreso: {planet_name} entra en {signo_esp}"
                         })
 
@@ -456,14 +456,18 @@ class TransitRangeScanner:
                     phase_esp = get_spanish_phase(curr_phase)
                     moon_sign_esp = get_spanish_sign(current_subject.moon.sign)
                     eventos_clave.append({
-                         "dia": day_offset + 1,
+                         "fecha": current_date.strftime("%d/%m/%Y"),
                          "evento": f"{phase_esp} en {moon_sign_esp}"
                     })
 
                 previous_subject = current_subject
 
+            end_date = start_date + timedelta(days=duration_days - 1) if duration_days > 0 else start_date
+            start_date_str = start_date.strftime("%d/%m/%Y")
+            end_date_str = end_date.strftime("%d/%m/%Y")
+
             data = {
-                "periodo": f"{duration_days} días",
+                "periodo": f"Del {start_date_str} al {end_date_str} ({duration_days} días)",
                 "eventos_clave": eventos_clave,
                 "clima_astral_general": clima_astral_general
             }
