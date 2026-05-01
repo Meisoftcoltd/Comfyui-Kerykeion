@@ -8,7 +8,7 @@ import io
 import torch
 import numpy as np
 
-from date_utils import ParseDateText, DateOffset, CurrentDateFetcher
+from .date_utils import ParseDateText, DateOffset, CurrentDateFetcher
 
 # Dictionary to translate English sign names or abbreviations to Spanish full names
 SIGN_TRANSLATIONS = {
