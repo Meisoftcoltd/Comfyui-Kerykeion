@@ -8,6 +8,8 @@ import io
 import torch
 import numpy as np
 
+from date_utils import ParseDateText, DateOffset, CurrentDateFetcher
+
 # Dictionary to translate English sign names or abbreviations to Spanish full names
 SIGN_TRANSLATIONS = {
     "Aries": "Aries", "Ari": "Aries",
@@ -584,7 +586,10 @@ NODE_CLASS_MAPPINGS = {
     "TransitDataCalculator": TransitDataCalculator,
     "TransitRangeScanner": TransitRangeScanner,
     "SynastryCalculator": SynastryCalculator,
-    "NatalChartImageNode": NatalChartImageNode
+    "NatalChartImageNode": NatalChartImageNode,
+    "AstroParseDate": ParseDateText,
+    "AstroDateOffset": DateOffset,
+    "AstroCurrentDate": CurrentDateFetcher
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -592,5 +597,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "TransitDataCalculator": "Transit Data Calculator",
     "TransitRangeScanner": "Transit Range Scanner",
     "SynastryCalculator": "Synastry Calculator",
-    "NatalChartImageNode": "Natal Chart Image"
+    "NatalChartImageNode": "Natal Chart Image",
+    "AstroParseDate": "Astro Parse Date",
+    "AstroDateOffset": "Astro Date Offset",
+    "AstroCurrentDate": "Astro Current Date"
 }
