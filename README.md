@@ -16,7 +16,7 @@ El repositorio expone 5 potentes nodos en la categoría `ComfyUI-Pitonisa`:
 
 3.  **Transit Range Scanner (`TransitRangeScanner`)**
     *   **Propósito:** El escáner temporal para predecir el futuro. Barre un rango de días y detecta cuándo un planeta cambia de signo (ingresos) y cuándo ocurren fases lunares mayores.
-    *   **Salida:** Un JSON en español resumiendo los "eventos clave" del periodo. ¡Oro puro para pedirle a un LLM que escriba horóscopos semanales o mensuales!
+    *   **Salida:** Un JSON en español resumiendo los "eventos clave" del periodo. ¡Oro puro para pedirle a un LLM que escriba horóscopos semanales, mensuales o predicciones anuales completas!
 
 4.  **Synastry Calculator (`SynastryCalculator`)**
     *   **Propósito:** Calcula la compatibilidad (Sinastría) entre dos personas.

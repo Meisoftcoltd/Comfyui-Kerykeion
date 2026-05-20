@@ -328,7 +328,7 @@ class TransitRangeScanner:
                 "start_year": ("INT", {"default": 2024, "min": 1900, "max": 2100}),
                 "start_month": ("INT", {"default": 1, "min": 1, "max": 12}),
                 "start_day": ("INT", {"default": 1, "min": 1, "max": 31}),
-                "duration_days": ("INT", {"default": 7, "min": 1, "max": 31}),
+                "duration_days": ("INT", {"default": 7, "min": 1, "max": 366}),
                 "city_name": ("STRING", {"default": "Madrid"}),
             }
         }
